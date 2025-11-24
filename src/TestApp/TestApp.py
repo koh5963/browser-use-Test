@@ -352,7 +352,7 @@ async def save_screenshot(agent: Agent, directory: Optional[str] = None) -> Opti
 
     browser = getattr(agent, "browser", None)
     controller = getattr(browser, "playwright_controller", None) or getattr(browser, "_playwright_controller", None)
-    page = getattr(controller, "page", None) if controller else None
+    page = _resolve_playwright_page(controller)
 
     if page is None:
         print(">>> [Screenshot] ページオブジェクトが見つからないためスクリーンショットを保存できませんでした")
@@ -368,6 +368,45 @@ async def save_screenshot(agent: Agent, directory: Optional[str] = None) -> Opti
     except Exception as exc:  # noqa: BLE001 - トレース用に例外をそのまま表示
         print(f">>> [Screenshot] スクリーンショットの保存に失敗しました: {exc}")
         return None
+
+
+def _resolve_playwright_page(controller: Any) -> Optional[Any]:
+    """スクリーンショット取得に利用できるPlaywrightのPageを解決する。
+
+    Agent.run() 完了後に ``controller.page`` が ``None`` になるケースがあり、
+    その場合に自動保存が失敗していた。コンテキストやブラウザインスタンスに
+    まだページが残っていることが多いため、そちらからも取得を試みる。
+    """
+
+    if controller is None:
+        return None
+
+    page = getattr(controller, "page", None)
+    if page is not None:
+        return page
+
+    context = getattr(controller, "context", None)
+    if context is not None:
+        pages = context.pages if not callable(getattr(context, "pages", None)) else context.pages()
+        if pages:
+            return pages[0]
+
+    browser = getattr(controller, "browser", None)
+    contexts = None
+    if browser is not None:
+        contexts = getattr(browser, "contexts", None)
+        if callable(contexts):
+            contexts = contexts()
+
+    if contexts:
+        for ctx in contexts:
+            pages = getattr(ctx, "pages", None)
+            if callable(pages):
+                pages = pages()
+            if pages:
+                return pages[0]
+
+    return None
 
 if __name__ == "__main__":
     asyncio.run(main())
