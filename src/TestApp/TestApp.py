@@ -294,15 +294,21 @@ def install_dialog_handler(agent: Agent) -> None:
                         color: "#fff",
                         fontSize: "14px",
                         zIndex: 99999,
-                        maxWidth: "360px",
+                        maxWidth: "420px",
                         borderRadius: "10px",
                         boxShadow: "0 8px 18px rgba(0,0,0,0.35)",
                         lineHeight: "1.4",
                         backdropFilter: "blur(2px)",
+                        whiteSpace: "pre-wrap",
                     });
                     document.body.appendChild(box);
                 }
 
+                // エージェントが後段で読めるように最新ダイアログを window に保持
+                const store = (window.__dialogMessages ||= []);
+                const payload = { type, message: msg, timestamp: Date.now() };
+                store.push(payload);
+                window.__lastDialogMessage = payload;
                 const line = document.createElement("div");
                 line.textContent = `[${type}] ${msg}`;
                 line.style.marginBottom = "6px";
