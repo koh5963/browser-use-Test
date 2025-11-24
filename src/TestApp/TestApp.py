@@ -160,6 +160,7 @@ async def run_agent():
     )
 
     patch_vision_click_with_js_offset(agent)
+    install_dialog_handler(agent)
 
     result = await agent.run()
     print("\n===== AGENT RESULT =====")
@@ -200,9 +201,23 @@ def patch_vision_click_with_js_offset(agent: Agent) -> None:
                 """
                 ({ x, y }) => {
                     const ratio = window.devicePixelRatio || 1;
+
+                    // 視覚ビューポートのズーム補正（ピンチズーム等）。
+                    const vv = window.visualViewport;
+                    const viewportScale = vv?.scale ?? 1;
+                    const viewportOffsetX = (vv?.offsetLeft ?? 0) + (vv?.pageLeft ?? 0);
+                    const viewportOffsetY = (vv?.offsetTop ?? 0) + (vv?.pageTop ?? 0);
+
                     const scrollX = window.scrollX || 0;
                     const scrollY = window.scrollY || 0;
-                    return { x: x / ratio + scrollX, y: y / ratio + scrollY };
+
+                    // devicePixelRatio と viewport のズーム倍率を両方考慮する。
+                    const scale = ratio * viewportScale;
+
+                    return {
+                        x: x / scale + scrollX + viewportOffsetX,
+                        y: y / scale + scrollY + viewportOffsetY,
+                    };
                 }
                 """,
                 {"x": x, "y": y},
@@ -224,6 +239,82 @@ def _resolve_click_function(controller: Any) -> Optional[Callable[..., Any]]:
             if callable(fn):
                 return fn
     return None
+
+
+def install_dialog_handler(agent: Agent) -> None:
+    """Playwrightダイアログ(alert/prompt)を可視化・自動応答する。
+
+    headless環境ではポップアップが視覚的に出ないため、dialogイベントをフックして
+    - 受信したダイアログをページ右上にログ表示
+    - promptには内容に応じた自動入力を行う
+    を行い、エージェントのクリック後にアラートが見えない問題を防ぐ。
+    """
+
+    browser = getattr(agent, "browser", None)
+    controller = getattr(browser, "playwright_controller", None) or getattr(browser, "_playwright_controller", None)
+    if controller is None or getattr(controller, "_dialog_handler_installed", False):
+        return
+
+    page = getattr(controller, "page", None)
+    if page is None:
+        return
+
+    async def _on_dialog(dialog):
+        message = dialog.message
+        dialog_type = dialog.type
+
+        # promptの入力値を決定（氏名/メールに応じて自動入力）
+        response = None
+        if dialog_type == "prompt":
+            if "氏名" in message:
+                response = "Taro Yamada"
+            elif "メール" in message:
+                response = "taro@example.com"
+            else:
+                response = dialog.defaultValue or ""
+            await dialog.accept(response)
+        else:
+            await dialog.accept()
+
+        # 画面右上にログ表示してVisionで読めるようにする
+        await page.evaluate(
+            """
+            (msg, type) => {
+                const id = "dialog-log-overlay";
+                let box = document.getElementById(id);
+                if (!box) {
+                    box = document.createElement("div");
+                    box.id = id;
+                    Object.assign(box.style, {
+                        position: "fixed",
+                        top: "16px",
+                        right: "16px",
+                        padding: "12px 14px",
+                        background: "rgba(0, 0, 0, 0.78)",
+                        color: "#fff",
+                        fontSize: "14px",
+                        zIndex: 99999,
+                        maxWidth: "360px",
+                        borderRadius: "10px",
+                        boxShadow: "0 8px 18px rgba(0,0,0,0.35)",
+                        lineHeight: "1.4",
+                        backdropFilter: "blur(2px)",
+                    });
+                    document.body.appendChild(box);
+                }
+
+                const line = document.createElement("div");
+                line.textContent = `[${type}] ${msg}`;
+                line.style.marginBottom = "6px";
+                box.appendChild(line);
+            }
+            """,
+            message,
+            dialog_type,
+        )
+
+    page.on("dialog", _on_dialog)
+    setattr(controller, "_dialog_handler_installed", True)
 
 if __name__ == "__main__":
     asyncio.run(main())
