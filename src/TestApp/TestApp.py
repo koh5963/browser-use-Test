@@ -309,7 +309,6 @@ def install_dialog_handler(agent: Agent) -> None:
                 const payload = { type, message: msg, timestamp: Date.now() };
                 store.push(payload);
                 window.__lastDialogMessage = payload;
-
                 const line = document.createElement("div");
                 line.textContent = `[${type}] ${msg}`;
                 line.style.marginBottom = "6px";
