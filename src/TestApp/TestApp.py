@@ -2,6 +2,8 @@
 import os
 import asyncio
 import inspect
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from browser_use.agent.service import Agent
@@ -166,6 +168,9 @@ async def run_agent():
     print("\n===== AGENT RESULT =====")
     print(result)
 
+    if should_auto_save_screenshots():
+        await save_screenshot(agent)
+
     llm.print_totals()
 
 
@@ -321,6 +326,48 @@ def install_dialog_handler(agent: Agent) -> None:
 
     page.on("dialog", _on_dialog)
     setattr(controller, "_dialog_handler_installed", True)
+
+
+def should_auto_save_screenshots() -> bool:
+    """環境変数に基づきスクリーンショット自動保存を有効化するか判定する。"""
+
+    flag = os.environ.get("AUTO_SAVE_SCREENSHOTS", "false").lower()
+    return flag in {"1", "true", "yes", "on"}
+
+
+async def save_screenshot(agent: Agent, directory: Optional[str] = None) -> Optional[Path]:
+    """Playwrightページのスクリーンショットを保存する。
+
+    Args:
+        agent: 実行中のAgentインスタンス。
+        directory: 保存先ディレクトリ。未指定の場合は ``AUTO_SAVE_SCREENSHOTS_DIR``
+            環境変数、もしくは ``screenshots`` を利用する。
+
+    Returns:
+        保存されたファイルパス（失敗時は None）。
+    """
+
+    target_dir = Path(directory or os.environ.get("AUTO_SAVE_SCREENSHOTS_DIR", "screenshots"))
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    browser = getattr(agent, "browser", None)
+    controller = getattr(browser, "playwright_controller", None) or getattr(browser, "_playwright_controller", None)
+    page = getattr(controller, "page", None) if controller else None
+
+    if page is None:
+        print(">>> [Screenshot] ページオブジェクトが見つからないためスクリーンショットを保存できませんでした")
+        return None
+
+    filename = f"agent_screenshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    filepath = target_dir / filename
+
+    try:
+        await page.screenshot(path=str(filepath), full_page=True)
+        print(f">>> [Screenshot] スクリーンショットを保存しました: {filepath}")
+        return filepath
+    except Exception as exc:  # noqa: BLE001 - トレース用に例外をそのまま表示
+        print(f">>> [Screenshot] スクリーンショットの保存に失敗しました: {exc}")
+        return None
 
 if __name__ == "__main__":
     asyncio.run(main())
