@@ -1,8 +1,11 @@
 """Main module."""
 import os
 import asyncio
-from browser_use.llm import ChatOpenAI
+import inspect
+from typing import Any, Callable, Optional
+
 from browser_use.agent.service import Agent
+from browser_use.llm import ChatOpenAI
 
 class LoggingChatOpenAI(ChatOpenAI):
     def __init__(self, *args, **kwargs):
@@ -156,11 +159,71 @@ async def run_agent():
         vision_detail_level="low",
     )
 
+    patch_vision_click_with_js_offset(agent)
+
     result = await agent.run()
     print("\n===== AGENT RESULT =====")
     print(result)
-    
+
     llm.print_totals()
+
+
+def patch_vision_click_with_js_offset(agent: Agent) -> None:
+    """Visionクリック時の座標にdevicePixelRatio補正をかけるJSラッパーを登録する。
+
+    browser-useのVisionはスクリーンショット座標を返すため、devicePixelRatioを考慮しないと
+    実ページのクリック位置がずれることがある。click_on_coordinates相当のメソッドをラップし、
+    JSでCSSピクセルに補正したうえで既存のクリック処理を呼び出す。
+    """
+
+    browser = getattr(agent, "browser", None)
+    controller = getattr(browser, "playwright_controller", None) or getattr(browser, "_playwright_controller", None)
+    if controller is None:
+        return
+
+    click_fn = _resolve_click_function(controller)
+    if click_fn is None or getattr(controller, "_vision_click_wrapped", False):
+        return
+
+    signature = inspect.signature(click_fn)
+
+    async def _wrapped_click(*args: Any, **kwargs: Any):
+        bound = signature.bind_partial(*args, **kwargs)
+        bound.apply_defaults()
+
+        x = bound.arguments.get("x") or bound.arguments.get("coord_x")
+        y = bound.arguments.get("y") or bound.arguments.get("coord_y")
+        page = bound.arguments.get("page") or getattr(controller, "page", None)
+
+        if page is not None and x is not None and y is not None:
+            corrected = await page.evaluate(
+                """
+                ({ x, y }) => {
+                    const ratio = window.devicePixelRatio || 1;
+                    const scrollX = window.scrollX || 0;
+                    const scrollY = window.scrollY || 0;
+                    return { x: x / ratio + scrollX, y: y / ratio + scrollY };
+                }
+                """,
+                {"x": x, "y": y},
+            )
+
+            bound.arguments["x"] = corrected.get("x", x)
+            bound.arguments["y"] = corrected.get("y", y)
+
+        return await click_fn(*bound.args, **bound.kwargs)
+
+    setattr(controller, click_fn.__name__, _wrapped_click)
+    setattr(controller, "_vision_click_wrapped", True)
+
+
+def _resolve_click_function(controller: Any) -> Optional[Callable[..., Any]]:
+    for candidate in ("click_on_coordinates", "click_on_page_coordinates", "click"):
+        if hasattr(controller, candidate):
+            fn = getattr(controller, candidate)
+            if callable(fn):
+                return fn
+    return None
 
 if __name__ == "__main__":
     asyncio.run(main())
