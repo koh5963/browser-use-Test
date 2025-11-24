@@ -28,6 +28,11 @@ pip install playwright
 playwright install
 ```
 
+## Environment Settings
+```powershell
+$env:OPENAI_API_KEY="your API key"
+```
+
 ## Usage
 
 ```python
