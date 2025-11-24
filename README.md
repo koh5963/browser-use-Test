@@ -36,3 +36,15 @@ from browser_use import BrowserUse
 browser = BrowserUse()
 browser.run("Google検索でTESTと検索して最初の結果を取得")
 ```
+
+### 自動スクリーンショット保存
+
+環境変数でエージェント実行後にページスクリーンショットを自動保存できます。
+
+```
+export AUTO_SAVE_SCREENSHOTS=true           # 自動保存を有効化
+export AUTO_SAVE_SCREENSHOTS_DIR=artifacts  # (任意) 保存先ディレクトリを変更
+```
+
+``AUTO_SAVE_SCREENSHOTS`` が有効な場合、`screenshots/`（または指定したディレクトリ）直下に
+`agent_screenshot_YYYYMMDD_HHMMSS.png` 形式で保存されます。
