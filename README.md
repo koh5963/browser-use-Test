@@ -1,20 +1,21 @@
 # Browser-Use-Test
 
-~~![PyPI version](https://img.shields.io/pypi/v/TestApp.svg)~~
-~~[![Documentation Status](https://readthedocs.org/projects/TestApp/badge/?version=latest)](https://TestApp.readthedocs.io/en/latest/?version=latest)~~
-
-Application for ***browser-use*** practice.  
-This repository is for experimenting with browser automation + Vision-based UI analysis.  
+Sandbox project for experimenting with **browser-use** automation and Vision-based UI analysis.
+It documents how to install dependencies, configure API keys, and run a small sample task.
 
 * Free software: MIT License
-* ~~PyPI package: https://pypi.org/project/TestApp/~~
-* ~~Documentation: https://TestApp.readthedocs.io.~~
 
 ## Features
 
-* browser-useもろもろ検証
-* Vision機能検証
+* browser-use を用いた各種自動化検証
+* Vision 機能の挙動確認
 * 将来的には仕様書を読み込んでテストケース自動生成→自動テスト→エビデンス作成まで
+
+## Requirements
+
+* Python 3.9+
+* OpenAI API キー
+* Playwright で使用するブラウザ（`playwright install` でセットアップ）
 
 ## Credits
 
@@ -22,18 +23,28 @@ This package was created with [Cookiecutter](https://github.com/audreyfeldroy/co
 
 ## Installation
 
-```powershell
-pip install -U browser-use
-pip install playwright
+```bash
+python -m pip install -U browser-use
+python -m pip install playwright
 playwright install
 ```
 
 ## Environment Settings
+
+Set your OpenAI API key before running the examples:
+
+```bash
+export OPENAI_API_KEY="your API key"   # macOS/Linux
+```
+
 ```powershell
-$env:OPENAI_API_KEY="your API key"
+$env:OPENAI_API_KEY="your API key"    # Windows (PowerShell)
 ```
 
 ## Usage
+
+Create an agent and run a simple query. The example below opens Google, searches for "TEST",
+and returns the first result.
 
 ```python
 from browser_use import BrowserUse
